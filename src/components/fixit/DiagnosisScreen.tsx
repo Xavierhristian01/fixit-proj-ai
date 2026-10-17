@@ -35,7 +35,7 @@ export function DiagnosisScreen({
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing, qIndex]);
 
   function answer(a: Answer, text?: string) {
-    const q = scenario.questions[qIndex];
+    const q = scenario.questions[qIndex]!;
     setMsgs((m) => [...m, { id: m.length, from: "bot", text: q.text[lang] }, { id: m.length + 1, from: "user", text: text ?? labels[a] }]);
     setTyping(true);
     setTimeout(() => {
@@ -112,7 +112,7 @@ export function DiagnosisScreen({
           {!typing && !finished && (
             <motion.div key={qIndex} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="rounded-[16px] border border-border bg-card p-4">
               <div className="text-[12px] font-semibold uppercase tracking-wide text-primary">Question {qIndex + 1} of {scenario.questions.length}</div>
-              <p className="mt-1 text-[17px] font-semibold leading-snug">{scenario.questions[qIndex].text[lang]}</p>
+              <p className="mt-1 text-[17px] font-semibold leading-snug">{scenario.questions[qIndex]?.text[lang]}</p>
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {(["yes", "no", "unsure"] as const).map((a) => (
                   <Btn key={a} variant={a === "unsure" ? "outline" : "dark"} className="min-h-12" onClick={() => answer(a)}>{labels[a]}</Btn>

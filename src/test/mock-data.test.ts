@@ -10,8 +10,8 @@ describe("demo scenarios", () => {
   });
   it("causes sort highest first after an answer", () => {
     const s = getScenario(pump, "Runs but no water");
-    const next = applyEffect(s.causes, s.questions[0].effects.no);
-    expect(next[0].label).toBe("Dry well or empty tank");
+    const next = applyEffect(s.causes, s.questions[0]!.effects.no);
+    expect(next[0]?.label).toBe("Dry well or empty tank");
   });
   it("car + brakes feel soft ends in a safety stop", () => {
     expect(getScenario(car, "Brakes feel soft").result.kind).toBe("safety");

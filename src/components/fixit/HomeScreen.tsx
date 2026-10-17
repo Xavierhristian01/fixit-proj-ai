@@ -7,7 +7,7 @@ import { Btn, TrustChip, machineIcons, rise } from "./ui";
 import { cn } from "@/lib/utils";
 
 export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string) => void }) {
-  const [selected, setSelected] = useState<Machine>(machines[1]);
+  const [selected, setSelected] = useState<Machine>(machines[1]!);
   const [text, setText] = useState("");
 
   return (
