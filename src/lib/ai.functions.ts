@@ -111,39 +111,76 @@ export const diagnose = createServerFn({ method: "POST" })
     return { turn: null, error: FRIENDLY };
   });
 
+const PHOTO_PROMPT = `You are helping a technician diagnose a machine from a photo. Describe only what is visible and useful: what machine it is, any brand or model on a nameplate, warning lights on a dashboard, leaks, smoke colour, rust, burns, broken or loose parts, wear. Return ONLY JSON:
+{"machine_guess": "...", "nameplate_text": "... or null", "visible_issues": ["..."], "safety_flags": ["..."], "confidence": "low" | "medium" | "high"}
+If the photo is unclear, say so in visible_issues and set confidence to low.`;
+
+export type PhotoFindings = {
+  machine_guess: string;
+  nameplate_text: string | null;
+  visible_issues: string[];
+  safety_flags: string[];
+  confidence: "low" | "medium" | "high";
+};
+
+const findingsSchema = z.object({
+  machine_guess: z.string().catch(""),
+  nameplate_text: z.string().nullable().catch(null).transform((v) => (v && v.toLowerCase() !== "null" ? v : null)),
+  visible_issues: z.array(z.string()).catch([]),
+  safety_flags: z.array(z.string()).catch([]),
+  confidence: z.enum(["low", "medium", "high"]).catch("low"),
+});
+
+/** Parse JSON even when wrapped in ``` fences or surrounded by text. */
+export function parseLooseJson(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = (fenced?.[1] ?? text).trim();
+  try { return JSON.parse(body); } catch { /* fall through */ }
+  const a = body.indexOf("{"), b = body.lastIndexOf("}");
+  if (a >= 0 && b > a) return JSON.parse(body.slice(a, b + 1));
+  throw new Error("no json");
+}
+
+async function viaGemini(image: string): Promise<string> {
+  const key = process.env["GEMINI_API_KEY"];
+  if (!key) throw new Error("no gemini key");
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: "image/jpeg", data: image } }, { text: PHOTO_PROMPT }] }] }),
+  });
+  if (!res.ok) throw new Error(`gemini ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
+  return json.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? "").join("") ?? "";
+}
+
+async function viaGroq(image: string): Promise<string> {
+  const key = process.env["GROQ_API_KEY"];
+  if (!key) throw new Error("no groq key");
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "qwen/qwen3.8-27b",
+      messages: [{ role: "user", content: [{ type: "text", text: PHOTO_PROMPT }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }] }],
+    }),
+  });
+  if (!res.ok) throw new Error(`groq vision ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  return json.choices?.[0]?.message?.content ?? "";
+}
+
+// Photos are only held in memory for this request and never stored.
 export const analyzePhoto = createServerFn({ method: "POST" })
-  .inputValidator((d) =>
-    z.object({ image: z.string().max(6_000_000), mimeType: z.string().regex(/^image\//), machine: z.string().max(60) }).parse(d),
-  )
-  .handler(async ({ data }): Promise<{ description: string | null; error?: string }> => {
-    const key = process.env["GEMINI_API_KEY"];
-    if (!key) return { description: null, error: "missing key" };
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent?key=${encodeURIComponent(key)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{
-              role: "user",
-              parts: [
-                { text: `This photo shows a ${data.machine}. In one or two plain sentences, describe the visible problem (damage, leaks, burn marks, smoke, loose or broken parts). If you cannot see a problem, describe what part is shown. No emoji, no preamble.` },
-                { inline_data: { mime_type: data.mimeType, data: data.image } },
-              ],
-            }],
-          }),
-        },
-      );
-      if (!res.ok) {
-        console.error("gemini", res.status, await res.text());
-        return { description: null, error: "ai unavailable" };
+  .inputValidator((d) => z.object({ image: z.string().min(1).max(4_000_000) }).parse(d))
+  .handler(async ({ data }): Promise<{ findings: PhotoFindings | null; error?: string }> => {
+    for (const [name, call] of [["gemini", viaGemini], ["groq", viaGroq]] as const) {
+      try {
+        const text = await call(data.image);
+        return { findings: findingsSchema.parse(parseLooseJson(text)) };
+      } catch (e) {
+        console.error("analyze-photo", name, e);
       }
-      const json = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-      const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim();
-      return text ? { description: text } : { description: null, error: "empty" };
-    } catch (e) {
-      console.error("analyze-photo", e);
-      return { description: null, error: "ai unavailable" };
     }
+    return { findings: null, error: "FixIt couldn't read that photo right now. You can describe the problem instead." };
   });
