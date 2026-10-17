@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, ChevronDown, RotateCcw, SendHorizontal } from "lucide-react";
+import { ArrowLeft, Camera, ChevronDown, RotateCcw, SendHorizontal } from "lucide-react";
 import type { Difficulty, Lang, Machine, Scenario } from "@/lib/mock-data";
-import { diagnose, type AiTurn } from "@/lib/ai.functions";
+import { analyzePhoto, diagnose, type AiTurn, type PhotoFindings } from "@/lib/ai.functions";
 import { safetyScenario } from "@/lib/safety";
 import { Btn, TrustChip } from "./ui";
+import { FindingsCard, PhotoBubble, PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
 
-type Msg = { id: number; from: "user" | "bot"; text: string };
+type Msg =
+  | { id: number; from: "user" | "bot"; kind: "text"; text: string }
+  | { id: number; from: "user"; kind: "photo"; url: string; analyzing: boolean }
+  | { id: number; from: "bot"; kind: "findings"; findings: PhotoFindings };
 const diff: Record<AiTurn["checklist"][number]["difficulty"], Difficulty> = { easy: "Easy", medium: "Medium", pro: "Call a pro" };
+const safetySteps = safetyScenario("").result.steps;
 
 function toResult(t: AiTurn): Scenario["result"] {
   if (t.status === "safety_stop") {
-    const steps = safetyScenario("").result.steps;
-    return { kind: "safety", reason: t.safety_message ?? "This could be dangerous. Stop using it and call a qualified technician.", steps };
+    return { kind: "safety", reason: t.safety_message ?? "This could be dangerous. Stop using it and call a qualified technician.", steps: safetySteps };
   }
   const top = t.causes[0];
   return {
@@ -26,12 +30,17 @@ function toResult(t: AiTurn): Scenario["result"] {
 }
 
 export function DiagnosisScreen({
-  machine, symptom, photoFindings, onBack, onDone,
-}: { machine: Machine; symptom: string; photoFindings?: string | null; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
+  machine, symptom, photo, onBack, onDone,
+}: { machine: Machine; symptom: string; photo?: Photo | null; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
   const run = useServerFn(diagnose);
+  const runPhoto = useServerFn(analyzePhoto);
+  const pic = usePhotoPicker();
+  const nextId = useRef(0);
+  const id = () => nextId.current++;
   const [lang, setLang] = useState<Lang>("en");
-  const [msgs, setMsgs] = useState<Msg[]>([{ id: 0, from: "user", text: symptom }]);
-  const [convo, setConvo] = useState<{ role: "user" | "assistant"; content: string }[]>([{ role: "user", content: symptom }]);
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [convo, setConvo] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [findingsText, setFindingsText] = useState<string | null>(null);
   const [typing, setTyping] = useState(true);
   const [turn, setTurn] = useState<AiTurn | null>(null);
   const [qCount, setQCount] = useState(0);
@@ -44,14 +53,14 @@ export function DiagnosisScreen({
   const done = turn != null && turn.status !== "asking";
   const causes = turn?.causes ?? [];
 
-  async function ask(conversation: typeof convo, answerText: string | null) {
+  async function ask(conversation: typeof convo, answerText: string | null, findings: string | null) {
     setTyping(true); setError(null);
     try {
-      const r = await run({ data: { machine: machine.name, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: photoFindings ?? null } });
+      const r = await run({ data: { machine: machine.name, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: findings } });
       if (!r.turn) { setError(r.error ?? "Something went wrong. Please try again."); return; }
       const t = r.turn;
       setConvo([...conversation, { role: "assistant", content: JSON.stringify(t) }]);
-      setMsgs((m) => [...m, { id: m.length, from: "bot", text: t.reply }]);
+      setMsgs((m) => [...m, { id: id(), from: "bot", kind: "text", text: t.reply }]);
       setTurn(t);
       if (t.status === "asking" && t.question) setQCount((n) => n + 1);
       if (t.status !== "asking") setTimeout(() => onDone(toResult(t)), 1400);
@@ -62,18 +71,52 @@ export function DiagnosisScreen({
     }
   }
 
-  useEffect(() => { void ask(convo, null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  /** Send text and/or a photo. Photos are analysed first; findings go to the technician. */
+  async function send(text: string, p: Photo | null, isFirst = false) {
+    const q = !isFirst ? turn?.question?.text : undefined;
+    const add: Msg[] = [];
+    if (q) add.push({ id: id(), from: "bot", kind: "text", text: q });
+    if (text) add.push({ id: id(), from: "user", kind: "text", text });
+    const photoId = p ? id() : -1;
+    if (p) add.push({ id: photoId, from: "user", kind: "photo", url: p.url, analyzing: true });
+    setMsgs((m) => [...m, ...add]);
+    setTurn((t) => (t ? { ...t, question: null } : t));
+    setTyping(!p);
+
+    let findings = findingsText;
+    let userContent = text;
+    if (p) {
+      let f: PhotoFindings | null = null;
+      try { f = (await runPhoto({ data: { image: p.base64 } })).findings; } catch { /* handled below */ }
+      setMsgs((m) => m.map((x) => (x.id === photoId && x.kind === "photo" ? { ...x, analyzing: false } : x)));
+      if (f) {
+        setMsgs((m) => [...m, { id: id(), from: "bot", kind: "findings", findings: f }]);
+        if (f.safety_flags.length > 0) {
+          setTurn({ reply: "", question: null, causes: [], status: "safety_stop", checklist: [], safety_message: null });
+          setTimeout(() => onDone({ kind: "safety", reason: `The photo shows a safety risk: ${f.safety_flags.join(", ")}. Stop using it now and call a qualified technician.`, steps: safetySteps }), 1400);
+          return;
+        }
+        const ft = JSON.stringify(f);
+        findings = findings ? `${findings}\n${ft}` : ft;
+        setFindingsText(findings);
+      } else {
+        setMsgs((m) => [...m, { id: id(), from: "bot", kind: "text", text: "I couldn't read that photo, so I'll go on what you tell me." }]);
+      }
+      userContent = text || "I sent a photo.";
+    }
+    const next = [...convo, { role: "user" as const, content: userContent || symptom }];
+    setConvo(next);
+    setLastAnswer(isFirst ? null : userContent);
+    await ask(next, isFirst ? null : userContent, findings);
+  }
+
+  useEffect(() => { void send(symptom, photo ?? null, true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing, turn, error]);
 
-  function answer(text: string) {
-    if (typing || done) return;
-    const q = turn?.question?.text;
-    setMsgs((m) => [...m, ...(q ? [{ id: m.length, from: "bot" as const, text: q }] : []), { id: m.length + (q ? 1 : 0), from: "user", text }]);
-    const next = [...convo, { role: "user" as const, content: text }];
-    setConvo(next);
-    setLastAnswer(text);
-    setTurn((t) => (t ? { ...t, question: null } : t));
-    void ask(next, text);
+  const busy = typing || msgs.some((m) => m.kind === "photo" && m.analyzing);
+  function answer(text: string, p: Photo | null = null) {
+    if (busy || done) return;
+    void send(text, p);
   }
 
   return (
