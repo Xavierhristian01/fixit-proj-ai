@@ -19,11 +19,12 @@ async function shrink(file: File): Promise<{ image: string; mimeType: string }> 
   return { image: url.split(",")[1]!, mimeType: "image/jpeg" };
 }
 
-export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, symptom: string) => void; busy?: boolean }) {
+export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, symptom: string, photoFindings: string | null) => void; busy?: boolean }) {
   const [selected, setSelected] = useState<Machine>(machines[1]!);
   const [text, setText] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [findings, setFindings] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const runPhoto = useServerFn(analyzePhoto);
 
@@ -33,6 +34,7 @@ export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, sy
     try {
       const img = await shrink(file);
       const r = await runPhoto({ data: { ...img, machine: selected.name } });
+      if (r.description) setFindings((f) => (f ? `${f} ${r.description}` : r.description!));
       if (r.description) setText((t) => (t ? `${t} ${r.description}` : r.description!));
       else setPhotoError("Couldn't read that photo. Please describe the problem instead.");
     } catch {
@@ -54,7 +56,7 @@ export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, sy
 
       <motion.form
         variants={rise} initial="hidden" animate="show" custom={1}
-        onSubmit={(e) => { e.preventDefault(); if (text.trim() && !busy) onStart(selected, text.trim()); }}
+        onSubmit={(e) => { e.preventDefault(); if (text.trim() && !busy) onStart(selected, text.trim(), findings); }}
         className="mt-5 rounded-[16px] border border-border bg-card p-3"
       >
         <textarea
@@ -114,7 +116,7 @@ export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, sy
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => onStart(selected, s)}
+              onClick={() => onStart(selected, s, findings)}
               className="min-h-11 rounded-full border border-border bg-card px-4 text-[14px] font-medium"
             >
               {s}

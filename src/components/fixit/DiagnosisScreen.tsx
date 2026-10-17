@@ -1,54 +1,79 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Camera, ChevronDown, SendHorizontal } from "lucide-react";
-import { applyEffect, type Cause, type Lang, type Machine, type Scenario } from "@/lib/mock-data";
+import { useServerFn } from "@tanstack/react-start";
+import { ArrowLeft, ChevronDown, RotateCcw, SendHorizontal } from "lucide-react";
+import type { Difficulty, Lang, Machine, Scenario } from "@/lib/mock-data";
+import { diagnose, type AiTurn } from "@/lib/ai.functions";
+import { safetyScenario } from "@/lib/safety";
 import { Btn, TrustChip } from "./ui";
 import { cn } from "@/lib/utils";
 
 type Msg = { id: number; from: "user" | "bot"; text: string };
-type Answer = "yes" | "no" | "unsure";
-const labels: Record<Answer, string> = { yes: "Yes", no: "No", unsure: "Not sure" };
+const diff: Record<AiTurn["checklist"][number]["difficulty"], Difficulty> = { easy: "Easy", medium: "Medium", pro: "Call a pro" };
+
+function toResult(t: AiTurn): Scenario["result"] {
+  if (t.status === "safety_stop") {
+    const steps = safetyScenario("").result.steps;
+    return { kind: "safety", reason: t.safety_message ?? "This could be dangerous. Stop using it and call a qualified technician.", steps };
+  }
+  const top = t.causes[0];
+  return {
+    kind: "fix",
+    cause: top?.name ?? "Unclear fault",
+    confidence: Math.round(top?.likelihood ?? 0),
+    steps: t.checklist.map((s) => (s.source ? { text: s.step, difficulty: diff[s.difficulty], source: s.source } : { text: s.step, difficulty: diff[s.difficulty] })),
+  };
+}
 
 export function DiagnosisScreen({
-  machine, symptom, scenario, onBack, onDone,
-}: { machine: Machine; symptom: string; scenario: Scenario; onBack: () => void; onDone: (c: Cause[]) => void }) {
+  machine, symptom, photoFindings, onBack, onDone,
+}: { machine: Machine; symptom: string; photoFindings?: string | null; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
+  const run = useServerFn(diagnose);
   const [lang, setLang] = useState<Lang>("en");
   const [msgs, setMsgs] = useState<Msg[]>([{ id: 0, from: "user", text: symptom }]);
+  const [convo, setConvo] = useState<{ role: "user" | "assistant"; content: string }[]>([{ role: "user", content: symptom }]);
   const [typing, setTyping] = useState(true);
-  const [qIndex, setQIndex] = useState(0);
-  const [causes, setCauses] = useState(scenario.causes);
+  const [turn, setTurn] = useState<AiTurn | null>(null);
+  const [qCount, setQCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [lastAnswer, setLastAnswer] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const finished = qIndex >= scenario.questions.length;
+  const done = turn != null && turn.status !== "asking";
+  const causes = turn?.causes ?? [];
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setMsgs((m) => [...m, { id: 1, from: "bot", text: scenario.intro[lang] }]);
+  async function ask(conversation: typeof convo, answerText: string | null) {
+    setTyping(true); setError(null);
+    try {
+      const r = await run({ data: { machine: machine.name, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: photoFindings ?? null } });
+      if (!r.turn) { setError(r.error ?? "Something went wrong. Please try again."); return; }
+      const t = r.turn;
+      setConvo([...conversation, { role: "assistant", content: JSON.stringify(t) }]);
+      setMsgs((m) => [...m, { id: m.length, from: "bot", text: t.reply }]);
+      setTurn(t);
+      if (t.status === "asking" && t.question) setQCount((n) => n + 1);
+      if (t.status !== "asking") setTimeout(() => onDone(toResult(t)), 1400);
+    } catch {
+      setError("FixIt can't reach the technician right now. Please try again in a moment.");
+    } finally {
       setTyping(false);
-    }, 900);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    }
+  }
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing, qIndex]);
+  useEffect(() => { void ask(convo, null); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing, turn, error]);
 
-  function answer(a: Answer, text?: string) {
-    const q = scenario.questions[qIndex]!;
-    setMsgs((m) => [...m, { id: m.length, from: "bot", text: q.text[lang] }, { id: m.length + 1, from: "user", text: text ?? labels[a] }]);
-    setTyping(true);
-    setTimeout(() => {
-      const next = applyEffect(causes, q.effects[a]);
-      setCauses(next);
-      setTyping(false);
-      const n = qIndex + 1;
-      setQIndex(n);
-      if (n >= scenario.questions.length) {
-        setMsgs((m) => [...m, { id: m.length, from: "bot", text: lang === "en" ? "Thanks. I have enough to give you a plan." : "Thank you. I don get enough to give you plan." }]);
-        setTimeout(() => onDone(next), 1100);
-      }
-    }, 900);
+  function answer(text: string) {
+    if (typing || done) return;
+    const q = turn?.question?.text;
+    setMsgs((m) => [...m, ...(q ? [{ id: m.length, from: "bot" as const, text: q }] : []), { id: m.length + (q ? 1 : 0), from: "user", text }]);
+    const next = [...convo, { role: "user" as const, content: text }];
+    setConvo(next);
+    setLastAnswer(text);
+    setTurn((t) => (t ? { ...t, question: null } : t));
+    void ask(next, text);
   }
 
   return (
@@ -77,14 +102,15 @@ export function DiagnosisScreen({
         <AnimatePresence initial={false}>
           {open && (
             <motion.ul initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              {causes.length === 0 && <li className="pb-3 text-[14px] text-muted-foreground">Working it out...</li>}
               {causes.map((c, i) => (
-                <motion.li key={c.id} layout transition={{ type: "spring", stiffness: 400, damping: 34 }} className="pb-3">
+                <motion.li key={c.name} layout transition={{ type: "spring", stiffness: 400, damping: 34 }} className="pb-3">
                   <div className="flex justify-between text-[14px]">
-                    <span className={cn(i === 0 && "font-semibold")}>{c.label}</span>
-                    <span className="tabular-nums text-muted-foreground">{c.pct}%</span>
+                    <span className={cn(i === 0 && "font-semibold")}>{c.name}</span>
+                    <span className="tabular-nums text-muted-foreground">{Math.round(c.likelihood)}%</span>
                   </div>
                   <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
-                    <motion.div className={cn("h-full rounded-full", i === 0 ? "bg-primary" : "bg-secondary/40")} initial={{ width: 0 }} animate={{ width: `${c.pct}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
+                    <motion.div className={cn("h-full rounded-full", i === 0 ? "bg-primary" : "bg-secondary/40")} initial={{ width: 0 }} animate={{ width: `${c.likelihood}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
                   </div>
                 </motion.li>
               ))}
@@ -96,7 +122,7 @@ export function DiagnosisScreen({
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {msgs.map((m) => (
           <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("flex", m.from === "user" && "justify-end")}>
-            <div className={cn("max-w-[82%] rounded-[16px] px-4 py-3 text-[15px] leading-relaxed", m.from === "user" ? "rounded-br-sm bg-secondary text-secondary-foreground" : "rounded-bl-sm bg-card")}>
+            <div className={cn("max-w-[82%] whitespace-pre-line rounded-[16px] px-4 py-3 text-[15px] leading-relaxed", m.from === "user" ? "rounded-br-sm bg-secondary text-secondary-foreground" : "rounded-bl-sm bg-card")}>
               {m.text}
             </div>
           </motion.div>
@@ -108,14 +134,20 @@ export function DiagnosisScreen({
             ))}
           </motion.div>
         )}
+        {error && !typing && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[16px] border border-border bg-card p-4">
+            <p className="text-[15px]">{error}</p>
+            <Btn variant="outline" className="mt-3 w-full" onClick={() => ask(convo, lastAnswer)}><RotateCcw className="size-4" />Try again</Btn>
+          </motion.div>
+        )}
         <AnimatePresence>
-          {!typing && !finished && (
-            <motion.div key={qIndex} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="rounded-[16px] border border-border bg-card p-4">
-              <div className="text-[12px] font-semibold uppercase tracking-wide text-primary">Question {qIndex + 1} of {scenario.questions.length}</div>
-              <p className="mt-1 text-[17px] font-semibold leading-snug">{scenario.questions[qIndex]?.text[lang]}</p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {(["yes", "no", "unsure"] as const).map((a) => (
-                  <Btn key={a} variant={a === "unsure" ? "outline" : "dark"} className="min-h-12" onClick={() => answer(a)}>{labels[a]}</Btn>
+          {!typing && !done && !error && turn?.question && (
+            <motion.div key={qCount} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2, ease: "easeOut" }} className="rounded-[16px] border border-border bg-card p-4">
+              <div className="text-[12px] font-semibold uppercase tracking-wide text-primary">Question {qCount}</div>
+              <p className="mt-1 text-[17px] font-semibold leading-snug">{turn.question.text}</p>
+              <div className={cn("mt-4 grid gap-2", turn.question.options.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+                {turn.question.options.map((o, i) => (
+                  <Btn key={o} variant={i === turn.question!.options.length - 1 ? "outline" : "dark"} className="min-h-12 px-2" onClick={() => answer(o)}>{o}</Btn>
                 ))}
               </div>
               <button onClick={() => inputRef.current?.focus()} className="mt-2 min-h-11 w-full text-[14px] font-semibold text-primary">Type an answer</button>
@@ -126,12 +158,11 @@ export function DiagnosisScreen({
       </div>
 
       <form
-        onSubmit={(e) => { e.preventDefault(); if (input.trim() && !typing && !finished) { answer("unsure", input.trim()); setInput(""); } }}
+        onSubmit={(e) => { e.preventDefault(); if (input.trim()) { answer(input.trim()); setInput(""); } }}
         className="flex items-center gap-2 border-t border-border bg-card px-3 py-3"
       >
-        <Btn type="button" variant="outline" className="size-11 shrink-0 px-0" aria-label="Add a photo"><Camera className="size-5" /></Btn>
         <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={lang === "en" ? "Type a message" : "Write wetin you see"} className="min-h-11 min-w-0 flex-1 rounded-[12px] bg-muted px-4 text-[16px] outline-none" />
-        <Btn type="submit" disabled={!input.trim()} className="size-11 shrink-0 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
+        <Btn type="submit" disabled={!input.trim() || typing || done} className="size-11 shrink-0 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
       </form>
     </div>
   );
