@@ -13,15 +13,15 @@ const diff: Record<AiTurn["checklist"][number]["difficulty"], Difficulty> = { ea
 
 function toResult(t: AiTurn): Scenario["result"] {
   if (t.status === "safety_stop") {
-    const base = safetyScenario(t.safety_message ?? "This could be dangerous.").result;
-    return { ...base, reason: t.safety_message ?? base.reason } as Scenario["result"];
+    const steps = safetyScenario("").result.steps;
+    return { kind: "safety", reason: t.safety_message ?? "This could be dangerous. Stop using it and call a qualified technician.", steps };
   }
   const top = t.causes[0];
   return {
     kind: "fix",
     cause: top?.name ?? "Unclear fault",
     confidence: Math.round(top?.likelihood ?? 0),
-    steps: t.checklist.map((s) => ({ text: s.step, difficulty: diff[s.difficulty], source: s.source ?? undefined })),
+    steps: t.checklist.map((s) => (s.source ? { text: s.step, difficulty: diff[s.difficulty], source: s.source } : { text: s.step, difficulty: diff[s.difficulty] })),
   };
 }
 
