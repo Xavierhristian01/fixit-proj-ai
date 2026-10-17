@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Machine, Scenario } from "@/lib/mock-data";
+import type { Photo } from "@/components/fixit/photo";
 import { HomeScreen } from "@/components/fixit/HomeScreen";
 import { DiagnosisScreen } from "@/components/fixit/DiagnosisScreen";
 import { ResultScreen } from "@/components/fixit/ResultScreen";
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Screen = "home" | "diagnosis" | "result";
-type Session = { machine: Machine; symptom: string; photoFindings: string | null; key: number; result?: Scenario["result"] };
+type Session = { machine: Machine; symptom: string; photo: Photo | null; key: number; result?: Scenario["result"] };
 
 function Index() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -41,11 +42,11 @@ function Index() {
           transition={{ duration: 0.2, ease: "easeOut" }}
         >
           {screen === "home" && (
-            <HomeScreen onStart={(machine, symptom, photoFindings) => { setSession({ machine, symptom, photoFindings, key: Date.now() }); go("diagnosis", 1); }} />
+            <HomeScreen onStart={(machine, symptom, photo) => { setSession({ machine, symptom, photo, key: Date.now() }); go("diagnosis", 1); }} />
           )}
           {screen === "diagnosis" && session && (
             <DiagnosisScreen
-              machine={session.machine} symptom={session.symptom} photoFindings={session.photoFindings}
+              machine={session.machine} symptom={session.symptom} photo={session.photo}
               onBack={() => go("home", -1)}
               onDone={(result) => { setSession({ ...session, result }); go("result", 1); }}
             />
