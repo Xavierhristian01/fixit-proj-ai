@@ -50,13 +50,11 @@ export function DiagnosisScreen({
       const r = await run({ data: { machine: machine.name, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: photoFindings ?? null } });
       if (!r.turn) { setError(r.error ?? "Something went wrong. Please try again."); return; }
       const t = r.turn;
-      const text = [t.reply, t.status === "asking" ? t.question?.text : null].filter(Boolean).join("\n\n");
       setConvo([...conversation, { role: "assistant", content: JSON.stringify(t) }]);
       setMsgs((m) => [...m, { id: m.length, from: "bot", text: t.reply }]);
       setTurn(t);
       if (t.status === "asking" && t.question) setQCount((n) => n + 1);
       if (t.status !== "asking") setTimeout(() => onDone(toResult(t)), 1400);
-      void text;
     } catch {
       setError("FixIt can't reach the technician right now. Please try again in a moment.");
     } finally {
