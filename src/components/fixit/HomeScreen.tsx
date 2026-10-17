@@ -1,48 +1,17 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, Loader2, SendHorizontal } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
+import { Camera, SendHorizontal } from "lucide-react";
 import logo from "@/assets/fixit-logo-horizontal.png.asset.json";
 import { machines, type Machine } from "@/lib/mock-data";
-import { analyzePhoto } from "@/lib/ai.functions";
 import { Btn, TrustChip, machineIcons, rise } from "./ui";
+import { PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
 
-async function shrink(file: File): Promise<{ image: string; mimeType: string }> {
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement("canvas");
-  c.width = Math.round(bmp.width * scale);
-  c.height = Math.round(bmp.height * scale);
-  c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
-  const url = c.toDataURL("image/jpeg", 0.85);
-  return { image: url.split(",")[1]!, mimeType: "image/jpeg" };
-}
-
-export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, symptom: string, photoFindings: string | null) => void; busy?: boolean }) {
+export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string, photo: Photo | null) => void }) {
   const [selected, setSelected] = useState<Machine>(machines[1]!);
   const [text, setText] = useState("");
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoError, setPhotoError] = useState("");
-  const [findings, setFindings] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const runPhoto = useServerFn(analyzePhoto);
-
-  async function onPhoto(file?: File) {
-    if (!file) return;
-    setPhotoBusy(true); setPhotoError("");
-    try {
-      const img = await shrink(file);
-      const r = await runPhoto({ data: { ...img, machine: selected.name } });
-      if (r.description) setFindings((f) => (f ? `${f} ${r.description}` : r.description!));
-      if (r.description) setText((t) => (t ? `${t} ${r.description}` : r.description!));
-      else setPhotoError("Couldn't read that photo. Please describe the problem instead.");
-    } catch {
-      setPhotoError("Couldn't read that photo. Please describe the problem instead.");
-    }
-    setPhotoBusy(false);
-    if (fileRef.current) fileRef.current.value = "";
-  }
+  const pic = usePhotoPicker();
+  const canSend = !!text.trim() || !!pic.photo;
 
   return (
     <div className="flex min-h-dvh flex-col px-5 pb-10">
@@ -56,9 +25,10 @@ export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, sy
 
       <motion.form
         variants={rise} initial="hidden" animate="show" custom={1}
-        onSubmit={(e) => { e.preventDefault(); if (text.trim() && !busy) onStart(selected, text.trim(), findings); }}
+        onSubmit={(e) => { e.preventDefault(); if (canSend) onStart(selected, text.trim(), pic.photo); }}
         className="mt-5 rounded-[16px] border border-border bg-card p-3"
       >
+        <PhotoThumb photo={pic.photo} onRemove={() => pic.setPhoto(null)} />
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -66,16 +36,12 @@ export function HomeScreen({ onStart, busy = false }: { onStart: (m: Machine, sy
           placeholder="Describe the problem... e.g. my gen dey start but e no fit carry load"
           className="w-full resize-none bg-transparent px-1 text-[16px] outline-none placeholder:text-muted-foreground"
         />
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onPhoto(e.target.files?.[0])} />
+        {pic.input}
         <div className="mt-2 flex items-center justify-between">
-          <Btn type="button" variant="outline" className="size-11 px-0" aria-label="Add a photo" disabled={photoBusy} onClick={() => fileRef.current?.click()}>
-            {photoBusy ? <Loader2 className="size-5 animate-spin" /> : <Camera className="size-5" />}
-          </Btn>
-          <Btn type="submit" disabled={!text.trim() || busy} className="size-11 px-0" aria-label="Send">
-            {busy ? <Loader2 className="size-5 animate-spin" /> : <SendHorizontal className="size-5" />}
-          </Btn>
+          <Btn type="button" variant="outline" className="size-11 px-0" aria-label="Add a photo" onClick={pic.open}><Camera className="size-5" /></Btn>
+          <Btn type="submit" disabled={!canSend} className="size-11 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
         </div>
-        {photoError && <p className="mt-2 px-1 text-[13px] text-muted-foreground">{photoError}</p>}
+        {pic.error && <p className="mt-2 px-1 text-[13px] text-muted-foreground">{pic.error}</p>}
       </motion.form>
 
       <motion.h2 variants={rise} initial="hidden" animate="show" custom={2} className="mt-8 text-lg">Pick a machine</motion.h2>
