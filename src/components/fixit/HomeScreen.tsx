@@ -13,7 +13,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string)
   return (
     <div className="flex min-h-dvh flex-col px-5 pb-10">
       <header className="flex h-16 items-center">
-        <img src={logo.url} alt="FixIt AI" className="h-9 w-auto -ml-2" />
+        <img src={logo.url} alt="FixIt AI" className="h-14 w-auto -ml-4" />
       </header>
 
       <motion.h1 variants={rise} initial="hidden" animate="show" custom={0} className="mt-4 text-[32px] leading-tight">
