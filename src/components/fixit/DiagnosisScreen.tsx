@@ -165,9 +165,11 @@ export function DiagnosisScreen({
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {msgs.map((m) => (
           <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("flex", m.from === "user" && "justify-end")}>
-            <div className={cn("max-w-[82%] whitespace-pre-line rounded-[16px] px-4 py-3 text-[15px] leading-relaxed", m.from === "user" ? "rounded-br-sm bg-secondary text-secondary-foreground" : "rounded-bl-sm bg-card")}>
-              {m.text}
-            </div>
+            {m.kind === "photo" ? <PhotoBubble url={m.url} analyzing={m.analyzing} /> : m.kind === "findings" ? <FindingsCard f={m.findings} /> : (
+              <div className={cn("max-w-[82%] whitespace-pre-line rounded-[16px] px-4 py-3 text-[15px] leading-relaxed", m.from === "user" ? "rounded-br-sm bg-secondary text-secondary-foreground" : "rounded-bl-sm bg-card")}>
+                {m.text}
+              </div>
+            )}
           </motion.div>
         ))}
         {typing && (
