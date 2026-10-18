@@ -182,7 +182,7 @@ export function DiagnosisScreen({
         {error && !typing && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[16px] border border-border bg-card p-4">
             <p className="text-[15px]">{error}</p>
-            <Btn variant="outline" className="mt-3 w-full" onClick={() => ask(convo, lastAnswer)}><RotateCcw className="size-4" />Try again</Btn>
+            <Btn variant="outline" className="mt-3 w-full" onClick={() => ask(convo, lastAnswer, findingsText)}><RotateCcw className="size-4" />Try again</Btn>
           </motion.div>
         )}
         <AnimatePresence>
