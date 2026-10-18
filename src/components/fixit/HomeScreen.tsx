@@ -82,7 +82,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => onStart(selected, s, findings)}
+              onClick={() => onStart(selected, s, pic.photo)}
               className="min-h-11 rounded-full border border-border bg-card px-4 text-[14px] font-medium"
             >
               {s}
