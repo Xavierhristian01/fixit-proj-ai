@@ -201,11 +201,17 @@ export function DiagnosisScreen({
       </div>
 
       <form
-        onSubmit={(e) => { e.preventDefault(); if (input.trim()) { answer(input.trim()); setInput(""); } }}
-        className="flex items-center gap-2 border-t border-border bg-card px-3 py-3"
+        onSubmit={(e) => { e.preventDefault(); if ((input.trim() || pic.photo) && !busy && !done) { answer(input.trim(), pic.photo); setInput(""); pic.setPhoto(null); } }}
+        className="border-t border-border bg-card px-3 py-3"
       >
-        <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={lang === "en" ? "Type a message" : "Write wetin you see"} className="min-h-11 min-w-0 flex-1 rounded-[12px] bg-muted px-4 text-[16px] outline-none" />
-        <Btn type="submit" disabled={!input.trim() || typing || done} className="size-11 shrink-0 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
+        <PhotoThumb photo={pic.photo} onRemove={() => pic.setPhoto(null)} />
+        {pic.input}
+        <div className="flex items-center gap-2">
+          <Btn type="button" variant="outline" className="size-11 shrink-0 px-0" aria-label="Add a photo" onClick={pic.open} disabled={done}><Camera className="size-5" /></Btn>
+          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={lang === "en" ? "Type a message" : "Write wetin you see"} className="min-h-11 min-w-0 flex-1 rounded-[12px] bg-muted px-4 text-[16px] outline-none" />
+          <Btn type="submit" disabled={(!input.trim() && !pic.photo) || busy || done} className="size-11 shrink-0 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
+        </div>
+        {pic.error && <p className="mt-2 text-[13px] text-muted-foreground">{pic.error}</p>}
       </form>
     </div>
   );
