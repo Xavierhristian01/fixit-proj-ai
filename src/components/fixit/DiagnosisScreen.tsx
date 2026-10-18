@@ -110,7 +110,8 @@ export function DiagnosisScreen({
     await ask(next, isFirst ? null : userContent, findings);
   }
 
-  useEffect(() => { void send(symptom, photo ?? null, true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  const started = useRef(false);
+  useEffect(() => { if (started.current) return; started.current = true; void send(symptom, photo ?? null, true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing, turn, error]);
 
   const busy = typing || msgs.some((m) => m.kind === "photo" && m.analyzing);
