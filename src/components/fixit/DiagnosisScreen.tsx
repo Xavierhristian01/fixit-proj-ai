@@ -110,7 +110,8 @@ export function DiagnosisScreen({
     await ask(next, isFirst ? null : userContent, findings);
   }
 
-  useEffect(() => { void send(symptom, photo ?? null, true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  const started = useRef(false);
+  useEffect(() => { if (started.current) return; started.current = true; void send(symptom, photo ?? null, true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing, turn, error]);
 
   const busy = typing || msgs.some((m) => m.kind === "photo" && m.analyzing);
@@ -165,9 +166,11 @@ export function DiagnosisScreen({
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {msgs.map((m) => (
           <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("flex", m.from === "user" && "justify-end")}>
-            <div className={cn("max-w-[82%] whitespace-pre-line rounded-[16px] px-4 py-3 text-[15px] leading-relaxed", m.from === "user" ? "rounded-br-sm bg-secondary text-secondary-foreground" : "rounded-bl-sm bg-card")}>
-              {m.text}
-            </div>
+            {m.kind === "photo" ? <PhotoBubble url={m.url} analyzing={m.analyzing} /> : m.kind === "findings" ? <FindingsCard f={m.findings} /> : (
+              <div className={cn("max-w-[82%] whitespace-pre-line rounded-[16px] px-4 py-3 text-[15px] leading-relaxed", m.from === "user" ? "rounded-br-sm bg-secondary text-secondary-foreground" : "rounded-bl-sm bg-card")}>
+                {m.text}
+              </div>
+            )}
           </motion.div>
         ))}
         {typing && (
@@ -180,7 +183,7 @@ export function DiagnosisScreen({
         {error && !typing && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[16px] border border-border bg-card p-4">
             <p className="text-[15px]">{error}</p>
-            <Btn variant="outline" className="mt-3 w-full" onClick={() => ask(convo, lastAnswer)}><RotateCcw className="size-4" />Try again</Btn>
+            <Btn variant="outline" className="mt-3 w-full" onClick={() => ask(convo, lastAnswer, findingsText)}><RotateCcw className="size-4" />Try again</Btn>
           </motion.div>
         )}
         <AnimatePresence>
@@ -201,11 +204,17 @@ export function DiagnosisScreen({
       </div>
 
       <form
-        onSubmit={(e) => { e.preventDefault(); if (input.trim()) { answer(input.trim()); setInput(""); } }}
-        className="flex items-center gap-2 border-t border-border bg-card px-3 py-3"
+        onSubmit={(e) => { e.preventDefault(); if ((input.trim() || pic.photo) && !busy && !done) { answer(input.trim(), pic.photo); setInput(""); pic.setPhoto(null); } }}
+        className="border-t border-border bg-card px-3 py-3"
       >
-        <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={lang === "en" ? "Type a message" : "Write wetin you see"} className="min-h-11 min-w-0 flex-1 rounded-[12px] bg-muted px-4 text-[16px] outline-none" />
-        <Btn type="submit" disabled={!input.trim() || typing || done} className="size-11 shrink-0 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
+        <PhotoThumb photo={pic.photo} onRemove={() => pic.setPhoto(null)} />
+        {pic.input}
+        <div className="flex items-center gap-2">
+          <Btn type="button" variant="outline" className="size-11 shrink-0 px-0" aria-label="Add a photo" onClick={pic.open} disabled={done}><Camera className="size-5" /></Btn>
+          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={lang === "en" ? "Type a message" : "Write wetin you see"} className="min-h-11 min-w-0 flex-1 rounded-[12px] bg-muted px-4 text-[16px] outline-none" />
+          <Btn type="submit" disabled={(!input.trim() && !pic.photo) || busy || done} className="size-11 shrink-0 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
+        </div>
+        {pic.error && <p className="mt-2 text-[13px] text-muted-foreground">{pic.error}</p>}
       </form>
     </div>
   );
