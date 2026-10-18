@@ -8,7 +8,7 @@ import { PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
 
 export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string, photo: Photo | null) => void }) {
-  const [selected, setSelected] = useState<Machine>(machines[1]!);
+  const [selected, setSelected] = useState<Machine>(machines.find((m) => m.id === "other")!);
   const [text, setText] = useState("");
   const pic = usePhotoPicker();
   const canSend = !!text.trim() || !!pic.photo;
