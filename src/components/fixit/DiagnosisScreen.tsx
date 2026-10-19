@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Camera, ChevronDown, RotateCcw, SendHorizontal } from "lucide-react";
-import type { Difficulty, Lang, Machine, Scenario } from "@/lib/mock-data";
+import type { Lang, Machine, Mode, Scenario } from "@/lib/mock-data";
 import { analyzePhoto, diagnose, type AiTurn, type PhotoFindings } from "@/lib/ai.functions";
-import { safetyScenario } from "@/lib/safety";
+import { toResult, type AiCause } from "@/lib/ai-contract";
 import { Btn, TrustChip } from "./ui";
 import { FindingsCard, PhotoBubble, PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
@@ -13,25 +13,9 @@ type Msg =
   | { id: number; from: "user" | "bot"; kind: "text"; text: string }
   | { id: number; from: "user"; kind: "photo"; url: string; analyzing: boolean }
   | { id: number; from: "bot"; kind: "findings"; findings: PhotoFindings };
-const diff: Record<AiTurn["checklist"][number]["difficulty"], Difficulty> = { easy: "Easy", medium: "Medium", pro: "Call a pro" };
-const safetySteps = safetyScenario("").result.steps;
-
-function toResult(t: AiTurn): Scenario["result"] {
-  if (t.status === "safety_stop") {
-    return { kind: "safety", reason: t.safety_message ?? "This could be dangerous. Stop using it and call a qualified technician.", steps: safetySteps };
-  }
-  const top = t.causes[0];
-  return {
-    kind: "fix",
-    cause: top?.name ?? "Unclear fault",
-    confidence: Math.round(top?.likelihood ?? 0),
-    steps: t.checklist.map((s) => (s.source ? { text: s.step, difficulty: diff[s.difficulty], source: s.source } : { text: s.step, difficulty: diff[s.difficulty] })),
-  };
-}
-
 export function DiagnosisScreen({
-  machine, symptom, photo, onBack, onDone,
-}: { machine: Machine; symptom: string; photo?: Photo | null; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
+  machine, symptom, photo, initialMode, onBack, onDone,
+}: { machine: Machine; symptom: string; photo?: Photo | null; initialMode?: Mode; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
   const run = useServerFn(diagnose);
   const runPhoto = useServerFn(analyzePhoto);
   const pic = usePhotoPicker();
@@ -50,20 +34,24 @@ export function DiagnosisScreen({
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const lastCause = useRef<AiCause | undefined>(undefined);
+  const completionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const done = turn != null && turn.status !== "asking";
   const causes = turn?.causes ?? [];
+  const guide = (turn?.mode ?? initialMode) === "guide";
 
   async function ask(conversation: typeof convo, answerText: string | null, findings: string | null) {
     setTyping(true); setError(null);
     try {
-      const r = await run({ data: { machine: machine.name, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: findings } });
+      const r = await run({ data: { machine: machine.name, mode: initialMode, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: findings } });
       if (!r.turn) { setError(r.error ?? "Something went wrong. Please try again."); return; }
       const t = r.turn;
       setConvo([...conversation, { role: "assistant", content: JSON.stringify(t) }]);
       setMsgs((m) => [...m, { id: id(), from: "bot", kind: "text", text: t.reply }]);
       setTurn(t);
+      if (t.causes[0]) lastCause.current = t.causes[0];
       if (t.status === "asking" && t.question) setQCount((n) => n + 1);
-      if (t.status !== "asking") setTimeout(() => onDone(toResult(t)), 1400);
+      if (t.status !== "asking") completionTimer.current = setTimeout(() => onDone(toResult(t, symptom, lastCause.current)), t.risk === "emergency" ? 0 : 1400);
     } catch {
       setError("FixIt can't reach the technician right now. Please try again in a moment.");
     } finally {
@@ -91,11 +79,6 @@ export function DiagnosisScreen({
       setMsgs((m) => m.map((x) => (x.id === photoId && x.kind === "photo" ? { ...x, analyzing: false } : x)));
       if (f) {
         setMsgs((m) => [...m, { id: id(), from: "bot", kind: "findings", findings: f }]);
-        if (f.safety_flags.length > 0) {
-          setTurn({ reply: "", question: null, causes: [], status: "safety_stop", checklist: [], safety_message: null });
-          setTimeout(() => onDone({ kind: "safety", reason: `The photo shows a safety risk: ${f.safety_flags.join(", ")}. Stop using it now and call a qualified technician.`, steps: safetySteps }), 1400);
-          return;
-        }
         const ft = JSON.stringify(f);
         findings = findings ? `${findings}\n${ft}` : ft;
         setFindingsText(findings);
@@ -112,6 +95,7 @@ export function DiagnosisScreen({
 
   const started = useRef(false);
   useEffect(() => { if (started.current) return; started.current = true; void send(symptom, photo ?? null, true); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => () => { clearTimeout(completionTimer.current); }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing, turn, error]);
 
   const busy = typing || msgs.some((m) => m.kind === "photo" && m.analyzing);
@@ -140,12 +124,17 @@ export function DiagnosisScreen({
 
       <section className="border-b border-border bg-card px-4">
         <button onClick={() => setOpen(!open)} className="flex min-h-12 w-full items-center justify-between font-bold">
-          Likely causes
+          {guide ? "Your situation" : "Likely causes"}
           <motion.span animate={{ rotate: open ? 180 : 0 }}><ChevronDown className="size-5" /></motion.span>
         </button>
         <AnimatePresence initial={false}>
           {open && (
             <motion.ul initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              {guide ? (turn?.situation.length ? turn.situation.map((s) => (
+                <motion.li key={s.label} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }} className="flex gap-3 pb-3 text-[14px]">
+                  <span className="w-24 shrink-0 text-muted-foreground">{s.label}</span><span className="min-w-0 flex-1 font-medium">{s.value}</span>
+                </motion.li>
+              )) : <li className="pb-3 text-[14px] text-muted-foreground">Getting the details...</li>) : <>
               {causes.length === 0 && <li className="pb-3 text-[14px] text-muted-foreground">Working it out...</li>}
               {causes.map((c, i) => (
                 <motion.li key={c.name} layout transition={{ type: "spring", stiffness: 400, damping: 34 }} className="pb-3">
@@ -158,6 +147,7 @@ export function DiagnosisScreen({
                   </div>
                 </motion.li>
               ))}
+              </>}
             </motion.ul>
           )}
         </AnimatePresence>
@@ -193,7 +183,7 @@ export function DiagnosisScreen({
               <p className="mt-1 text-[17px] font-semibold leading-snug">{turn.question.text}</p>
               <div className={cn("mt-4 grid gap-2", turn.question.options.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
                 {turn.question.options.map((o, i) => (
-                  <Btn key={o} variant={i === turn.question!.options.length - 1 ? "outline" : "dark"} className="min-h-12 px-2" onClick={() => answer(o)}>{o}</Btn>
+                  <Btn key={o} variant={i === (turn.question?.options.length ?? 0) - 1 ? "outline" : "dark"} className="min-h-12 whitespace-normal break-words px-2" onClick={() => answer(o)}>{o}</Btn>
                 ))}
               </div>
               <button onClick={() => inputRef.current?.focus()} className="mt-2 min-h-11 w-full text-[14px] font-semibold text-primary">Type an answer</button>
