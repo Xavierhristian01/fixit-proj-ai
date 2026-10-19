@@ -2,13 +2,13 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, SendHorizontal } from "lucide-react";
 import logo from "@/assets/fixit-logo-horizontal.png.asset.json";
-import { machines, type Machine } from "@/lib/mock-data";
+import { machines, quickFixes, type Machine, type Mode } from "@/lib/mock-data";
 import { Btn, TrustChip, machineIcons, rise } from "./ui";
 import { PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
 
-export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string, photo: Photo | null) => void }) {
-  const [selected, setSelected] = useState<Machine>(machines.find((m) => m.id === "other")!);
+export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string, photo: Photo | null, mode?: Mode) => void }) {
+  const [selected, setSelected] = useState<Machine>(() => machines.find((m) => m.id === "other") ?? machines[0]);
   const [text, setText] = useState("");
   const pic = usePhotoPicker();
   const canSend = !!text.trim() || !!pic.photo;
@@ -70,6 +70,17 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
           );
         })}
       </div>
+
+      {quickFixes[selected.id].length > 0 && (
+        <section>
+          <h2 className="mt-8 text-lg">Quick fixes</h2>
+          <motion.div layout className="mt-3 flex flex-wrap gap-2">
+            {quickFixes[selected.id].map((job) => (
+              <Btn key={selected.id + job} variant="outline" className="rounded-full text-[14px]" onClick={() => onStart(selected, job, pic.photo, "guide")}>{job}</Btn>
+            ))}
+          </motion.div>
+        </section>
+      )}
 
       <h2 className="mt-8 text-lg">Common symptoms</h2>
       <motion.div layout className="mt-3 flex flex-wrap gap-2">

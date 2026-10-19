@@ -82,6 +82,8 @@
   --destructive-soft: oklch(0.96 0.025 25);
   --success: oklch(0.55 0.13 155);
   --success-soft: oklch(0.95 0.04 155);
+  --warning: oklch(0.48 0.12 75);
+  --warning-soft: oklch(0.96 0.06 85);
   --border: oklch(0.9 0.008 165);
   --input: oklch(0.9 0.008 165);
   --ring: oklch(0.636 0.19 41);
@@ -93,6 +95,8 @@
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-destructive-soft: var(--destructive-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --shadow-float: var(--shadow-float);
 }
 
@@ -106,5 +110,5 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
   }
-  h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; }
+  h1, h2, h3 { font-weight: 800; letter-spacing: 0; }
 }
