@@ -23,14 +23,32 @@ export interface Question {
   /** cause percentages after each answer */
   effects: Record<"yes" | "no" | "unsure", Record<string, number>>;
 }
-export interface Step { text: string; difficulty: Difficulty; source?: string }
+export type Mode = "diagnose" | "guide";
+export type Risk = "diy" | "careful" | "pro" | "emergency";
+export interface Step { text: string; difficulty: Difficulty; source?: string; warning?: string | null }
+export interface ResultDetails {
+  mode?: Mode;
+  risk?: Risk;
+  job?: string;
+  before_you_start?: { tools: string[]; safety_first: string[] } | null;
+  stop_if?: string[];
+  situation?: { label: string; value: string }[];
+}
+export const quickFixes: Record<MachineId, string[]> = {
+  car: ["Change a tyre", "Jump-start", "Check engine oil"],
+  generator: ["Clean the spark plug", "Change the oil"],
+  pump: ["Prime the pump"],
+  fan: ["Clean the fan"],
+  other: [],
+};
 export interface Scenario {
   intro: Record<Lang, string>;
   causes: Cause[];
   questions: Question[];
   result:
-    | { kind: "fix"; cause: string; confidence: number; steps: Step[] }
-    | { kind: "safety"; reason: string; steps: Step[] };
+    | ({ kind: "fix"; cause: string; confidence: number; steps: Step[] } & ResultDetails)
+    | ({ kind: "guide"; steps: Step[] } & ResultDetails)
+    | ({ kind: "safety"; reason: string; steps: Step[] } & ResultDetails);
 }
 
 const pump: Scenario = {

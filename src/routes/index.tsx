@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import type { Machine, Scenario } from "@/lib/mock-data";
+import type { Machine, Mode, Scenario } from "@/lib/mock-data";
 import type { Photo } from "@/components/fixit/photo";
 import { HomeScreen } from "@/components/fixit/HomeScreen";
 import { DiagnosisScreen } from "@/components/fixit/DiagnosisScreen";
@@ -11,9 +11,9 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "FixIt AI — Your pocket machine technician" },
-      { name: "description", content: "Troubleshoot generators, water pumps, cars and fans by chatting with an AI technician, in English or Pidgin." },
+      { name: "description", content: "Diagnose machine problems and get situation-aware DIY guides for cars, generators, pumps and everyday jobs, in English or Nigerian Pidgin." },
       { property: "og:title", content: "FixIt AI — Your pocket machine technician" },
-      { property: "og:description", content: "Chat with an AI technician to find out what's wrong with your machine and how to fix it." },
+      { property: "og:description", content: "Practical diagnosis and step-by-step DIY help, with precautions suited to your job and situation." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Screen = "home" | "diagnosis" | "result";
-type Session = { machine: Machine; symptom: string; photo: Photo | null; key: number; result?: Scenario["result"] };
+type Session = { machine: Machine; symptom: string; photo: Photo | null; mode?: Mode; key: number; result?: Scenario["result"] };
 
 function Index() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -42,11 +42,11 @@ function Index() {
           transition={{ duration: 0.2, ease: "easeOut" }}
         >
           {screen === "home" && (
-            <HomeScreen onStart={(machine, symptom, photo) => { setSession({ machine, symptom, photo, key: Date.now() }); go("diagnosis", 1); }} />
+            <HomeScreen onStart={(machine, symptom, photo, mode) => { setSession({ machine, symptom, photo, mode, key: Date.now() }); go("diagnosis", 1); }} />
           )}
           {screen === "diagnosis" && session && (
             <DiagnosisScreen
-              machine={session.machine} symptom={session.symptom} photo={session.photo}
+              machine={session.machine} symptom={session.symptom} photo={session.photo} initialMode={session.mode}
               onBack={() => go("home", -1)}
               onDone={(result) => { setSession({ ...session, result }); go("result", 1); }}
             />

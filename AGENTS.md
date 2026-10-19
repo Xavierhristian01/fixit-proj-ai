@@ -11,5 +11,6 @@
 
 ## Architecture rules
 - AI calls (diagnose, analyzePhoto) live as TanStack server functions in src/lib/ai.functions.ts, not Supabase edge functions — keys stay server-side and no Cloud backend is needed.
-- Safety keyword checks in src/lib/safety.ts run on the server for every diagnose call — the model alone is never trusted to trigger the Safety Stop.
+- Contextual emergency and professional-job guards in src/lib/safety.ts run server-side before every diagnosis, including photo evidence; job-based AI risk assessment complements them, so topic keywords alone never stop safe DIY work.
 - Photos are resized in the browser and sent only in memory; never persist them — privacy and mobile-data cost.
+- AI response validation and result/report conversion use browser-safe pure modules shared with tests, keeping risk, guidance and checklist semantics consistent across screens.
