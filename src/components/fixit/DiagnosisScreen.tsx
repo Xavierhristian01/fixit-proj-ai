@@ -15,7 +15,7 @@ type Msg =
   | { id: number; from: "bot"; kind: "findings"; findings: PhotoFindings };
 export function DiagnosisScreen({
   machine, symptom, photo, initialMode, onBack, onDone,
-}: { machine: Machine; symptom: string; photo?: Photo | null; initialMode?: Mode; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
+}: { machine: Machine; symptom: string; photo?: Photo | null; initialMode?: Mode | undefined; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
   const run = useServerFn(diagnose);
   const runPhoto = useServerFn(analyzePhoto);
   const pic = usePhotoPicker();

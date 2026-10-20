@@ -66,8 +66,7 @@ export const diagnose = createServerFn({ method: "POST" })
       const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       try {
         const turn = normalizeTurn(turnSchema.parse(parseLooseJson(json.choices?.[0]?.message?.content ?? "")), Boolean(data.pack));
-        const unsafeSteps = assessSafety(turn.checklist.map((s) => s.step).join(" "));
-        if (unsafeSteps) return { turn: safetyTurn(unsafeSteps, data.language, turn.mode) };
+        // Precautions mention hazards without reporting an active incident; do not keyword-scan them.
         return { turn };
       } catch (e) {
         console.error("diagnose invalid json, attempt", attempt + 1, e);

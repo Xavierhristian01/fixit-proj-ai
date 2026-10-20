@@ -22,7 +22,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Screen = "home" | "diagnosis" | "result";
-type Session = { machine: Machine; symptom: string; photo: Photo | null; mode?: Mode; key: number; result?: Scenario["result"] };
+type Session = { machine: Machine; symptom: string; photo: Photo | null; mode?: Mode | undefined; key: number; result?: Scenario["result"] };
 
 function Index() {
   const [screen, setScreen] = useState<Screen>("home");
