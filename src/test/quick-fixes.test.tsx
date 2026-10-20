@@ -8,7 +8,7 @@ describe("quick fixes start guidance", () => {
       const start = vi.fn();
       render(<HomeScreen onStart={start} />);
       fireEvent.click(screen.getByRole("button", { name: `${machine} Verified` }));
-      fireEvent.click(screen.getByRole("button", { name: job, exact: true }));
+      fireEvent.click(screen.getByRole("button", { name: job }));
       expect(start).toHaveBeenCalledWith(expect.objectContaining({ id }), job, null, "guide");
     });
   }

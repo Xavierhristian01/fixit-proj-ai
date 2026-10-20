@@ -77,4 +77,10 @@ describe("practical guidance rules", () => {
     expect(() => normalizeTurn({ ...guide, status: "safety_stop", risk: "diy" }, false)).toThrow();
     expect(normalizeTurn({ ...guide, risk: "pro" }, false).status).toBe("safety_stop");
   });
+  it("rejects unsupported clockwise loosening instructions", () => {
+    const t = { ...guide, checklist: guide.checklist.map((s, i) => i === 0 ? { ...s, step: "Loosen the priming plug clockwise" } : s) };
+    expect(() => normalizeTurn(t, false)).toThrow("thread direction");
+    const corrected = { ...t, checklist: t.checklist.map((s) => ({ ...s, step: s.step.replace("clockwise", "counter-clockwise") })) };
+    expect(() => normalizeTurn(corrected, false)).not.toThrow();
+  });
 });
