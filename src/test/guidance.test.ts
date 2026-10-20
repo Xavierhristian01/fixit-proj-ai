@@ -58,6 +58,14 @@ describe("practical guidance rules", () => {
   it("allows 4–12 steps and rejects shorter or oversized guides", () => {
     expect(() => normalizeTurn(guide, false)).not.toThrow();
     expect(() => normalizeTurn({ ...guide, checklist: guide.checklist.slice(0, 3) }, false)).toThrow();
+    expect(() => normalizeTurn({ ...guide, checklist: Array.from({ length: 13 }, () => guide.checklist[0]).filter((s) => s !== undefined) }, false)).toThrow();
+  });
+  it("rejects invented torque, tyre pressures and oil grades without a verified pack", () => {
+    for (const step of ["Tighten to about 80 Nm", "Inflate to 32 psi", "Use 10W-30 oil", "Pour 2 litres of oil"]) {
+      const t = { ...guide, checklist: guide.checklist.map((s, i) => i === 0 ? { ...s, step } : s) };
+      expect(() => normalizeTurn(t, false)).toThrow("Unverified exact specification");
+      expect(() => normalizeTurn(t, true)).not.toThrow();
+    }
   });
   it("only pro and emergency risk may end in safety stop", () => {
     expect(() => normalizeTurn({ ...guide, status: "safety_stop", risk: "diy" }, false)).toThrow();

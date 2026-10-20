@@ -35,6 +35,7 @@ export const diagnose = createServerFn({ method: "POST" })
       `Language: ${data.language}`,
       `Requested mode: ${data.mode ?? "infer from the user request"}`,
       `Assistant turns so far: ${data.conversation.filter((m) => m.role === "assistant").length}. Never ask more than six questions per phase; use known facts and give a safe plan, or safe next actions if essential information is missing.`,
+      "Ready guides MUST end with a separate final verification action. No approximate or exact torque, pressure, fluid quantity/grade or part number without a verified pack. Refer to the owner's manual, sticker or old-part label instead.",
       data.photo_findings ? `photo_findings: ${data.photo_findings}` : "photo_findings: none",
       data.pack ? `pack: ${JSON.stringify(data.pack)}` : "pack: none",
       data.last_answer ? `Answer to the last question: ${data.last_answer}` : "",
@@ -46,7 +47,7 @@ export const diagnose = createServerFn({ method: "POST" })
       ...data.conversation,
     ];
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       let res: Response;
       try {
         res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -70,6 +71,7 @@ export const diagnose = createServerFn({ method: "POST" })
         return { turn };
       } catch (e) {
         console.error("diagnose invalid json, attempt", attempt + 1, e);
+        messages.push({ role: "system", content: `Your previous response failed validation: ${e instanceof Error ? e.message : "Invalid JSON"}. Return the complete corrected JSON. Respect the job risk; never invent specifications. End ready guides with a final verification step.` });
       }
     }
     return { turn: null, error: FRIENDLY };
