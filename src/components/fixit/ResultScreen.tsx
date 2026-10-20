@@ -59,7 +59,7 @@ export function ResultScreen({ machine, symptom, scenario, onBack, onRestart }: 
       {risk === "emergency" && <a href="tel:112" className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-[12px] bg-destructive px-4 text-lg font-bold text-destructive-foreground"><Phone className="size-6" />Call 112</a>}
 
       {r.kind !== "safety" && r.before_you_start && (
-        <section className="mt-6">
+        <section className="mt-6 rounded-[16px] bg-card p-4">
           <h2 className="text-lg">Before you start</h2>
           {r.before_you_start.tools.length > 0 && <div className="mt-3"><h3 className="text-[14px]">Tools &amp; parts</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-[15px]">{r.before_you_start.tools.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
           {r.before_you_start.safety_first.length > 0 && <div className="mt-4"><h3 className="text-[14px] text-warning">Safety first</h3><ul className="mt-2 list-disc space-y-2 pl-5 text-[15px]">{r.before_you_start.safety_first.map((t, i) => <li key={i}>{t}</li>)}</ul></div>}

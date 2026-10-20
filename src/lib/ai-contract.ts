@@ -19,6 +19,16 @@ export type AiTurn = z.infer<typeof turnSchema>;
 export type AiCause = AiTurn["causes"][number];
 export type AiStep = AiTurn["checklist"][number];
 
+export function phaseQuestionCount(conversation: { role: "user" | "assistant"; content: string }[], mode: Mode): number {
+  return conversation.filter((m) => {
+    if (m.role !== "assistant") return false;
+    try {
+      const t = turnSchema.safeParse(JSON.parse(m.content));
+      return t.success && t.data.mode === mode && t.data.status === "asking";
+    } catch { return false; }
+  }).length;
+}
+
 export function safetyTurn(decision: SafetyDecision, language: "english" | "pidgin", mode: Mode): AiTurn {
   const result = safetyScenario(decision.reason, language === "pidgin" ? "pcm" : "en", decision).result;
   const reason = result.kind === "safety" ? result.reason : decision.reason;
@@ -29,9 +39,16 @@ export function safetyTurn(decision: SafetyDecision, language: "english" | "pidg
 
 export function normalizeTurn(turn: AiTurn, hasPack: boolean): AiTurn {
   const risky = turn.risk === "pro" || turn.risk === "emergency";
+  const visible = [turn.reply, turn.question?.text ?? "", ...turn.causes.map((c) => c.why),
+    ...turn.checklist.flatMap((s) => [s.step, s.warning ?? ""]), ...turn.stop_if,
+    ...turn.before_you_start?.tools ?? [], ...turn.before_you_start?.safety_first ?? []].join(" ");
+  if (!hasPack && /\b\d+(?:[.,]\d+)?\s*(?:n\s*[·.-]?\s*m|nm|psi|bar|kpa|mpa|ft[ -]?lb|lb[ -]?ft|litres?|liters?|ml|sae\s*\d+|w-?\d+)\b|\b\d{1,2}w[- ]?\d{2}\b/i.test(visible)) throw new Error("Unverified exact specification: refer to the manual, machine sticker or old-part label instead");
+  if (turn.checklist.length > 12) throw new Error("Guides must have at most 12 steps");
+  if (turn.checklist.some((s) => /\b(?:loosen|unscrew)\b[^.!?]{0,100}(?<!counter[-‑ ])\bclockwise\b/i.test(s.step))) throw new Error("Do not invent a thread direction: consult the manual or use counter-clockwise for an explicitly standard right-hand thread");
   if (!risky && turn.status === "safety_stop") throw new Error("DIY work cannot be a safety stop");
   if (!risky && turn.status !== "asking" && (turn.checklist.length < 4 || !turn.before_you_start)) throw new Error("Ready guides need preparation and 4–12 steps");
   if (turn.status === "asking" && !turn.question && !risky) throw new Error("Missing question");
+  if (turn.mode === "diagnose" && !risky && turn.causes.length < 3) throw new Error("Diagnosis needs 3–5 causes");
   return { ...turn,
     status: risky ? "safety_stop" : turn.status,
     question: risky || turn.status !== "asking" ? null : turn.question,

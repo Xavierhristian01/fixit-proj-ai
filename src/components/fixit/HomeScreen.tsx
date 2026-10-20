@@ -8,7 +8,11 @@ import { PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
 
 export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string, photo: Photo | null, mode?: Mode) => void }) {
-  const [selected, setSelected] = useState<Machine>(() => machines.find((m) => m.id === "other") ?? machines[0]);
+  const [selected, setSelected] = useState<Machine>(() => {
+    const other = machines.find((m) => m.id === "other");
+    if (!other) throw new Error("The default machine is missing");
+    return other;
+  });
   const [text, setText] = useState("");
   const pic = usePhotoPicker();
   const canSend = !!text.trim() || !!pic.photo;
