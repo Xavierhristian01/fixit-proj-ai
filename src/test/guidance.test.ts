@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReport, normalizeTurn, safetyTurn, toResult, type AiTurn } from "@/lib/ai-contract";
+import { buildReport, normalizeTurn, phaseQuestionCount, safetyTurn, toResult, type AiTurn } from "@/lib/ai-contract";
 import { assessSafety } from "@/lib/safety";
 import { quickFixes } from "@/lib/mock-data";
 
@@ -11,6 +11,12 @@ const guide: AiTurn = {
 };
 
 describe("practical guidance rules", () => {
+  it("counts the six-question limit separately for diagnosis and guide phases", () => {
+    const asking = { ...guide, status: "asking", question: { text: "Where?", options: ["Home", "Road"] } };
+    const conversation = Array.from({ length: 6 }, () => ({ role: "assistant" as const, content: JSON.stringify(asking) }));
+    expect(phaseQuestionCount(conversation, "guide")).toBe(6);
+    expect(phaseQuestionCount(conversation, "diagnose")).toBe(0);
+  });
   it("offers the requested jobs by machine", () => {
     expect(quickFixes.car).toEqual(["Change a tyre", "Jump-start", "Check engine oil"]);
     expect(quickFixes.generator).toEqual(["Clean the spark plug", "Change the oil"]);

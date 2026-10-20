@@ -19,6 +19,16 @@ export type AiTurn = z.infer<typeof turnSchema>;
 export type AiCause = AiTurn["causes"][number];
 export type AiStep = AiTurn["checklist"][number];
 
+export function phaseQuestionCount(conversation: { role: "user" | "assistant"; content: string }[], mode: Mode): number {
+  return conversation.filter((m) => {
+    if (m.role !== "assistant") return false;
+    try {
+      const t = turnSchema.safeParse(JSON.parse(m.content));
+      return t.success && t.data.mode === mode && t.data.status === "asking";
+    } catch { return false; }
+  }).length;
+}
+
 export function safetyTurn(decision: SafetyDecision, language: "english" | "pidgin", mode: Mode): AiTurn {
   const result = safetyScenario(decision.reason, language === "pidgin" ? "pcm" : "en", decision).result;
   const reason = result.kind === "safety" ? result.reason : decision.reason;
