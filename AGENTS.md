@@ -14,3 +14,4 @@
 - Contextual emergency and professional-job guards in src/lib/safety.ts run server-side before every diagnosis, including photo evidence; job-based AI risk assessment complements them, so topic keywords alone never stop safe DIY work.
 - Photos are resized in the browser and sent only in memory; never persist them — privacy and mobile-data cost.
 - AI response validation and result/report conversion use browser-safe pure modules shared with tests, keeping risk, guidance and checklist semantics consistent across screens.
+- Voice typing and read-aloud use the browser's built-in speech engine, not AI calls — free and no audio upload.
