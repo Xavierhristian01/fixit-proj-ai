@@ -37,7 +37,7 @@ export function useDictation(text: string, setText: (t: string) => void) {
 
 export function MicButton({ listening, onClick, disabled }: { listening: boolean; onClick: () => void; disabled?: boolean }) {
   return (
-    <Btn type="button" variant={listening ? "default" : "outline"} className={cn("size-11 shrink-0 px-0", listening && "animate-pulse")} aria-label={listening ? "Stop listening" : "Speak the problem"} aria-pressed={listening} onClick={onClick} disabled={disabled}>
+    <Btn type="button" variant={listening ? "primary" : "outline"} className={cn("size-11 shrink-0 px-0", listening && "animate-pulse")} aria-label={listening ? "Stop listening" : "Speak the problem"} aria-pressed={listening} onClick={onClick} disabled={disabled}>
       {listening ? <MicOff className="size-5" /> : <Mic className="size-5" />}
     </Btn>
   );
