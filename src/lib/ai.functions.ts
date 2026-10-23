@@ -108,20 +108,20 @@ export function parseLooseJson(text: string): unknown {
   throw new Error("no json");
 }
 
-async function viaGemini(image: string): Promise<string> {
+async function viaGemini(image: string, prompt = PHOTO_PROMPT): Promise<string> {
   const key = process.env["GEMINI_API_KEY"];
   if (!key) throw new Error("no gemini key");
   const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: "image/jpeg", data: image } }, { text: PHOTO_PROMPT }] }] }),
+    body: JSON.stringify({ contents: [{ role: "user", parts: [{ inline_data: { mime_type: "image/jpeg", data: image } }, { text: prompt }] }] }),
   });
   if (!res.ok) throw new Error(`gemini ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
   return json.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? "").join("") ?? "";
 }
 
-async function viaGroq(image: string): Promise<string> {
+async function viaGroq(image: string, prompt = PHOTO_PROMPT): Promise<string> {
   const key = process.env["GROQ_API_KEY"];
   if (!key) throw new Error("no groq key");
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -129,7 +129,7 @@ async function viaGroq(image: string): Promise<string> {
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "qwen/qwen3.8-27b",
-      messages: [{ role: "user", content: [{ type: "text", text: PHOTO_PROMPT }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }] }],
+      messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } }] }],
     }),
   });
   if (!res.ok) throw new Error(`groq vision ${res.status}: ${await res.text()}`);
@@ -150,4 +150,25 @@ export const analyzePhoto = createServerFn({ method: "POST" })
       }
     }
     return { findings: null, error: "FixIt couldn't read that photo right now. You can describe the problem instead." };
+  });
+
+const verifySchema = z.object({
+  verdict: z.enum(["looks_good", "check_again", "unsafe"]).catch("check_again"),
+  notes: z.array(z.string()).catch([]),
+});
+export type FixVerdict = z.infer<typeof verifySchema>;
+
+// Post-repair photo check; the photo is held in memory only and never stored.
+export const verifyFix = createServerFn({ method: "POST" })
+  .inputValidator((d) => z.object({ image: z.string().min(1).max(4_000_000), machine: z.string().max(60), job: z.string().max(300) }).parse(d))
+  .handler(async ({ data }): Promise<{ result: FixVerdict | null; error?: string }> => {
+    const prompt = `The user just finished this repair job on a ${data.machine}: "${data.job}". Look at the photo of the finished work and check only what is visible: parts seated and tightened, covers and caps back on, wires connected and not exposed, no leaks or puddles, no tools or rags left inside, nothing burnt or broken. Do not invent specifications. Return ONLY JSON: {"verdict": "looks_good" | "check_again" | "unsafe", "notes": ["short plain sentences, 1-4 items"]}. Use "unsafe" for exposed wires, fuel or gas leaks, smoke or loose wheel nuts. If the photo is unclear, use "check_again" and say what to photograph.`;
+    for (const [name, call] of [["gemini", viaGemini], ["groq", viaGroq]] as const) {
+      try {
+        return { result: verifySchema.parse(parseLooseJson(await call(data.image, prompt))) };
+      } catch (e) {
+        console.error("verify-fix", name, e);
+      }
+    }
+    return { result: null, error: "FixIt couldn't check that photo right now. Please try again in a moment." };
   });

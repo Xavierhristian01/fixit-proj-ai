@@ -74,3 +74,20 @@ export function buildReport(machine: string, job: string, r: Scenario["result"],
     ...(guide ? ["Steps completed:", ...r.steps.flatMap((s, i) => done.includes(i) ? [`${i + 1}. ${s.text}`] : []), ...(done.length === 0 ? ["None yet"] : [])] : []),
   ].join("\n");
 }
+
+/** Brief for a mechanic: what was found and checked, plus questions that protect the owner. No prices. */
+export function buildMechanicBrief(machine: string, job: string, r: Scenario["result"], done: number[]): string {
+  const found = r.kind === "fix" ? `Most likely cause: ${r.cause} (${r.confidence}% confidence)` : r.kind === "safety" ? `Why a professional is needed: ${r.reason}` : `Job: ${job}`;
+  const checked = r.steps.flatMap((s, i) => done.includes(i) ? [`- ${s.text}`] : []);
+  return [
+    "FixIt AI - Mechanic brief", `Machine: ${machine}`, `Problem: ${job}`, found,
+    ...(r.situation?.length ? ["Situation:", ...r.situation.map((s) => `- ${s.label}: ${s.value}`)] : []),
+    "Already checked by the owner:", ...(checked.length ? checked : ["- Nothing yet"]),
+    "Questions for the mechanic:",
+    "- What exactly is faulty, and can you show me?",
+    "- Which parts need replacing, and can I keep the old ones?",
+    "- Can you give me the full cost before you start?",
+    "- Is there anything I can check or buy myself?",
+    "Warning signs: being told to replace many parts at once without being shown why, or not getting the old parts back.",
+  ].join("\n");
+}
