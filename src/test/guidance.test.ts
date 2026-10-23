@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReport, normalizeTurn, phaseQuestionCount, safetyTurn, toResult, type AiTurn } from "@/lib/ai-contract";
+import { buildMechanicBrief, buildReport, normalizeTurn, phaseQuestionCount, safetyTurn, toResult, type AiTurn } from "@/lib/ai-contract";
 import { assessSafety } from "@/lib/safety";
 import { quickFixes } from "@/lib/mock-data";
 
@@ -82,5 +82,15 @@ describe("practical guidance rules", () => {
     expect(() => normalizeTurn(t, false)).toThrow("thread direction");
     const corrected = { ...t, checklist: t.checklist.map((s) => ({ ...s, step: s.step.replace("clockwise", "counter-clockwise") })) };
     expect(() => normalizeTurn(corrected, false)).not.toThrow();
+  });
+});
+describe("mechanic brief", () => {
+  it("lists ticked checks, protective questions and no prices", () => {
+    const r = toResult(guide, "Change a tyre");
+    const b = buildMechanicBrief("Car", "Change a tyre", r, [0]);
+    expect(b).toContain(`- ${r.steps[0]!.text}`);
+    expect(b).not.toContain(`- ${r.steps[1]!.text}`);
+    expect(b).toContain("can I keep the old ones?");
+    expect(b).not.toMatch(/₦|naira/i);
   });
 });

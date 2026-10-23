@@ -4,6 +4,7 @@ import { Camera, SendHorizontal } from "lucide-react";
 import logo from "@/assets/fixit-logo-horizontal.png.asset.json";
 import { machines, quickFixes, type Machine, type Mode } from "@/lib/mock-data";
 import { Btn, TrustChip, machineIcons, rise } from "./ui";
+import { MicButton, useDictation } from "./voice";
 import { PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
   });
   const [text, setText] = useState("");
   const pic = usePhotoPicker();
+  const mic = useDictation(text, setText);
   const canSend = !!text.trim() || !!pic.photo;
 
   return (
@@ -29,7 +31,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
 
       <motion.form
         variants={rise} initial="hidden" animate="show" custom={1}
-        onSubmit={(e) => { e.preventDefault(); if (canSend) onStart(selected, text.trim(), pic.photo); }}
+        onSubmit={(e) => { e.preventDefault(); if (canSend) { if (mic.listening) mic.toggle(); } if (canSend) onStart(selected, text.trim(), pic.photo); }}
         className="mt-5 rounded-[16px] border border-border bg-card p-3"
       >
         <PhotoThumb photo={pic.photo} onRemove={() => pic.setPhoto(null)} />
@@ -37,15 +39,16 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={3}
-          placeholder="Describe the problem... e.g. my gen dey start but e no fit carry load"
+          placeholder={mic.listening ? "Listening... speak clearly" : "Describe the problem... e.g. my gen dey start but e no fit carry load"}
           className="w-full resize-none bg-transparent px-1 text-[16px] outline-none placeholder:text-muted-foreground"
         />
         {pic.input}
         <div className="mt-2 flex items-center justify-between">
           <Btn type="button" variant="outline" className="size-11 px-0" aria-label="Add a photo" onClick={pic.open}><Camera className="size-5" /></Btn>
-          <Btn type="submit" disabled={!canSend} className="size-11 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
+          <span className="flex gap-2"><MicButton listening={mic.listening} onClick={mic.toggle} />
+          <Btn type="submit" disabled={!canSend} className="size-11 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn></span>
         </div>
-        {pic.error && <p className="mt-2 px-1 text-[13px] text-muted-foreground">{pic.error}</p>}
+        {(pic.error || mic.error) && <p className="mt-2 px-1 text-[13px] text-muted-foreground">{pic.error || mic.error}</p>}
       </motion.form>
 
       <motion.h2 variants={rise} initial="hidden" animate="show" custom={2} className="mt-8 text-lg">Pick a machine</motion.h2>
