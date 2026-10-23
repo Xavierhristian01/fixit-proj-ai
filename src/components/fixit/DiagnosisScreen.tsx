@@ -6,6 +6,7 @@ import type { Lang, Machine, Mode, Scenario } from "@/lib/mock-data";
 import { analyzePhoto, diagnose, type AiTurn, type PhotoFindings } from "@/lib/ai.functions";
 import { toResult, type AiCause } from "@/lib/ai-contract";
 import { Btn, TrustChip } from "./ui";
+import { MicButton, useDictation } from "./voice";
 import { FindingsCard, PhotoBubble, PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ export function DiagnosisScreen({
   const [open, setOpen] = useState(true);
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const mic = useDictation(input, setInput);
   const endRef = useRef<HTMLDivElement>(null);
   const lastCause = useRef<AiCause | undefined>(undefined);
   const completionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -194,17 +196,18 @@ export function DiagnosisScreen({
       </div>
 
       <form
-        onSubmit={(e) => { e.preventDefault(); if ((input.trim() || pic.photo) && !busy && !done) { answer(input.trim(), pic.photo); setInput(""); pic.setPhoto(null); } }}
+        onSubmit={(e) => { e.preventDefault(); if ((input.trim() || pic.photo) && !busy && !done) { if (mic.listening) mic.toggle(); answer(input.trim(), pic.photo); setInput(""); pic.setPhoto(null); } }}
         className="border-t border-border bg-card px-3 py-3"
       >
         <PhotoThumb photo={pic.photo} onRemove={() => pic.setPhoto(null)} />
         {pic.input}
         <div className="flex items-center gap-2">
           <Btn type="button" variant="outline" className="size-11 shrink-0 px-0" aria-label="Add a photo" onClick={pic.open} disabled={done}><Camera className="size-5" /></Btn>
-          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={lang === "en" ? "Type a message" : "Write wetin you see"} className="min-h-11 min-w-0 flex-1 rounded-[12px] bg-muted px-4 text-[16px] outline-none" />
+          <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={mic.listening ? "Listening... speak clearly" : lang === "en" ? "Type a message" : "Write wetin you see"} className="min-h-11 min-w-0 flex-1 rounded-[12px] bg-muted px-4 text-[16px] outline-none" />
+          <MicButton listening={mic.listening} onClick={mic.toggle} disabled={done} />
           <Btn type="submit" disabled={(!input.trim() && !pic.photo) || busy || done} className="size-11 shrink-0 px-0" aria-label="Send"><SendHorizontal className="size-5" /></Btn>
         </div>
-        {pic.error && <p className="mt-2 text-[13px] text-muted-foreground">{pic.error}</p>}
+        {(pic.error || mic.error) && <p className="mt-2 text-[13px] text-muted-foreground">{pic.error || mic.error}</p>}
       </form>
     </div>
   );
