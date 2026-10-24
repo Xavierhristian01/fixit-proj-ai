@@ -14,7 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      repair_history: {
+        Row: {
+          completed_steps: Json
+          created_at: string
+          id: string
+          identity: Json | null
+          job: string
+          machine_id: string
+          machine_name: string
+          result: Json
+          updated_at: string
+          user_id: string
+          verification: Json | null
+        }
+        Insert: {
+          completed_steps?: Json
+          created_at?: string
+          id?: string
+          identity?: Json | null
+          job: string
+          machine_id: string
+          machine_name: string
+          result: Json
+          updated_at?: string
+          user_id: string
+          verification?: Json | null
+        }
+        Update: {
+          completed_steps?: Json
+          created_at?: string
+          id?: string
+          identity?: Json | null
+          job?: string
+          machine_id?: string
+          machine_name?: string
+          result?: Json
+          updated_at?: string
+          user_id?: string
+          verification?: Json | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
