@@ -10,7 +10,8 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
-- AI calls (diagnose, analyzePhoto) live as TanStack server functions in src/lib/ai.functions.ts, not Supabase edge functions — keys stay server-side and no Cloud backend is needed.
+- AI calls use TanStack server functions with server-only Gateway helpers; existing diagnosis/photo providers remain unchanged unless explicitly requested, while confirmed-label guidance uses AI Gateway.
+- Repair history stores owner-scoped result snapshots, completed-step indices and verification text in Lovable Cloud under RLS; never store image or audio data.
 - Contextual emergency and professional-job guards in src/lib/safety.ts run server-side before every diagnosis, including photo evidence; job-based AI risk assessment complements them, so topic keywords alone never stop safe DIY work.
 - Photos are resized in the browser and sent only in memory; never persist them — privacy and mobile-data cost.
 - AI response validation and result/report conversion use browser-safe pure modules shared with tests, keeping risk, guidance and checklist semantics consistent across screens.
