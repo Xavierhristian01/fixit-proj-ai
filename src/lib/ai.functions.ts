@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { getRequest } from '@tanstack/react-start/server';
+import { identitySchema, identityContext } from './repair-record';
 import { assessSafety } from "./safety";
 import { normalizeTurn, phaseQuestionCount, safetyTurn, turnSchema, type AiTurn } from "./ai-contract";
 export type { AiTurn, AiCause, AiStep } from "./ai-contract";
@@ -14,6 +16,7 @@ const inputSchema = z.object({
   last_answer: z.string().max(600).nullable(),
   photo_findings: z.string().max(16000).nullable().optional(),
   pack: z.unknown().optional(),
+  identity: identitySchema.nullable().optional(),
 });
 
 const FRIENDLY = "FixIt can't reach the technician right now. Please try again in a moment.";
@@ -28,12 +31,13 @@ export const diagnose = createServerFn({ method: "POST" })
     if (forced) return { turn: safetyTurn(forced, data.language, data.mode ?? "diagnose") };
 
     const key = process.env["GROQ_API_KEY"];
-    if (!key) return { turn: null, error: FRIENDLY };
+    if (!key && !data.identity) return { turn: null, error: FRIENDLY };
 
     const context = [
       `Machine: ${data.machine}`,
       `Language: ${data.language}`,
       `Requested mode: ${data.mode ?? "infer from the user request"}`,
+      data.identity ? identityContext(data.identity) : '',
       `Assistant turns so far: ${data.conversation.filter((m) => m.role === "assistant").length}. Never ask more than six questions per phase; use known facts and give a safe plan, or safe next actions if essential information is missing.`,
       "Ready guides MUST end with a separate final verification action. No approximate or exact torque, pressure, fluid quantity/grade or part number without a verified pack. Refer to the owner's manual, sticker or old-part label instead.",
       data.photo_findings ? `photo_findings: ${data.photo_findings}` : "photo_findings: none",
@@ -46,6 +50,19 @@ export const diagnose = createServerFn({ method: "POST" })
       { role: "system", content: context },
       ...data.conversation,
     ];
+
+    if (data.identity) {
+      const gatewayKey = process.env['LOVABLE_API_KEY'];
+      if (!gatewayKey) return { turn: null, error: 'AI-powered model guidance is not configured.' };
+      try {
+        const { gatewayTurn } = await import('./gateway-turn.server');
+        const turn = normalizeTurn(turnSchema.parse(await gatewayTurn(getRequest(), gatewayKey, `${SYSTEM}\n${context}`, data.conversation)), Boolean(data.pack));
+        if (turn.status === 'asking' && phaseQuestionCount(data.conversation, turn.mode) >= 6) return { turn: null, error: 'More information is needed for a safe plan. Please describe your tools and location.' };
+        return { turn };
+      } catch (error) {
+        return { turn: null, error: error instanceof Error ? error.message : 'Could not get model-specific guidance.' };
+      }
+    }
 
     for (let attempt = 0; attempt < 3; attempt++) {
       let res: Response;

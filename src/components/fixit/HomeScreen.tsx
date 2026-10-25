@@ -7,8 +7,12 @@ import { Btn, TrustChip, machineIcons, rise } from "./ui";
 import { MicButton, useDictation } from "./voice";
 import { PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
+import { LabelScanner } from './LabelScanner';
+import type { MachineIdentity } from '@/lib/repair-record';
 
-export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string, photo: Photo | null, mode?: Mode) => void }) {
+export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string, photo: Photo | null, mode?: Mode, identity?: MachineIdentity | null) => void }) {
+  const [identity, setIdentity] = useState<MachineIdentity | null>(null);
+  const start = (m: Machine, symptom: string, photo: Photo | null, mode?: Mode) => identity ? onStart(m, symptom, photo, mode, identity) : onStart(m, symptom, photo, mode);
   const [selected, setSelected] = useState<Machine>(() => {
     const other = machines.find((m) => m.id === "other");
     if (!other) throw new Error("The default machine is missing");
@@ -31,7 +35,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
 
       <motion.form
         variants={rise} initial="hidden" animate="show" custom={1}
-        onSubmit={(e) => { e.preventDefault(); if (canSend) { if (mic.listening) mic.toggle(); } if (canSend) onStart(selected, text.trim(), pic.photo); }}
+        onSubmit={(e) => { e.preventDefault(); if (canSend) { if (mic.listening) mic.toggle(); } if (canSend) start(selected, text.trim(), pic.photo); }}
         className="mt-5 rounded-[16px] border border-border bg-card p-3"
       >
         <PhotoThumb photo={pic.photo} onRemove={() => pic.setPhoto(null)} />
@@ -50,6 +54,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
         </div>
         {(pic.error || mic.error) && <p className="mt-2 px-1 text-[13px] text-muted-foreground">{pic.error || mic.error}</p>}
       </motion.form>
+      <LabelScanner onConfirm={setIdentity} />
 
       <motion.h2 variants={rise} initial="hidden" animate="show" custom={2} className="mt-8 text-lg">Pick a machine</motion.h2>
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -83,7 +88,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
           <h2 className="mt-8 text-lg">Quick fixes</h2>
           <motion.div layout className="mt-3 flex flex-wrap gap-2">
             {quickFixes[selected.id].map((job) => (
-              <Btn key={selected.id + job} variant="outline" className="rounded-full text-[14px]" onClick={() => onStart(selected, job, pic.photo, "guide")}>{job}</Btn>
+              <Btn key={selected.id + job} variant="outline" className="rounded-full text-[14px]" onClick={() => start(selected, job, pic.photo, "guide")}>{job}</Btn>
             ))}
           </motion.div>
         </section>
@@ -100,7 +105,7 @@ export function HomeScreen({ onStart }: { onStart: (m: Machine, symptom: string,
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => onStart(selected, s, pic.photo)}
+              onClick={() => start(selected, s, pic.photo)}
               className="min-h-11 rounded-full border border-border bg-card px-4 text-[14px] font-medium"
             >
               {s}

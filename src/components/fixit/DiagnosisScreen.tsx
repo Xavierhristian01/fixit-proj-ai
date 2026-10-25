@@ -9,14 +9,15 @@ import { Btn, TrustChip } from "./ui";
 import { MicButton, useDictation } from "./voice";
 import { FindingsCard, PhotoBubble, PhotoThumb, usePhotoPicker, type Photo } from "./photo";
 import { cn } from "@/lib/utils";
+import type { MachineIdentity } from '@/lib/repair-record';
 
 type Msg =
   | { id: number; from: "user" | "bot"; kind: "text"; text: string }
   | { id: number; from: "user"; kind: "photo"; url: string; analyzing: boolean }
   | { id: number; from: "bot"; kind: "findings"; findings: PhotoFindings };
 export function DiagnosisScreen({
-  machine, symptom, photo, initialMode, onBack, onDone,
-}: { machine: Machine; symptom: string; photo?: Photo | null; initialMode?: Mode | undefined; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
+  machine, symptom, photo, initialMode, identity, onBack, onDone,
+}: { machine: Machine; symptom: string; photo?: Photo | null; initialMode?: Mode | undefined; identity?: MachineIdentity | null | undefined; onBack: () => void; onDone: (r: Scenario["result"]) => void }) {
   const run = useServerFn(diagnose);
   const runPhoto = useServerFn(analyzePhoto);
   const pic = usePhotoPicker();
@@ -45,7 +46,7 @@ export function DiagnosisScreen({
   async function ask(conversation: typeof convo, answerText: string | null, findings: string | null) {
     setTyping(true); setError(null);
     try {
-      const r = await run({ data: { machine: machine.name, mode: initialMode, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: findings } });
+      const r = await run({ data: { machine: machine.name, identity, mode: initialMode, language: lang === "en" ? "english" : "pidgin", conversation, last_answer: answerText, photo_findings: findings } });
       if (!r.turn) { setError(r.error ?? "Something went wrong. Please try again."); return; }
       const t = r.turn;
       setConvo([...conversation, { role: "assistant", content: JSON.stringify(t) }]);
@@ -111,7 +112,7 @@ export function DiagnosisScreen({
       <header className="flex items-center gap-2 border-b border-border bg-card px-2 py-2">
         <Btn variant="ghost" className="size-11 px-0" onClick={onBack} aria-label="Back"><ArrowLeft className="size-5" /></Btn>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-bold">{machine.name}</div>
+          <div className="truncate font-bold">{identity ? `${identity.make} ${identity.model}` : machine.name}</div>
           <TrustChip verified={machine.verified} />
         </div>
         <div className="flex shrink-0 rounded-[12px] bg-muted p-1 text-[13px] font-semibold">
